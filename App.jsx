@@ -89,7 +89,7 @@ function App() {
   const [triggerSearch, setTriggerSearch] = useState(false)
   // A/B Test flags
   const [abTests] = useState(() => ({
-    delayedSignup: Math.random() > 0.5,
+    delayedSignup: false,
     showAlternatives: Math.random() > 0.5,
   }))
 
@@ -502,7 +502,7 @@ function LandingPage({ navigate }) {
               {/* Big headline */}
               <div className="text-center mb-6">
                 <h1 className="text-4xl md:text-5xl font-bold text-white mb-3 drop-shadow-lg leading-tight">We optimize your wallet.<br/><span className="text-emerald-400">You just travel.</span></h1>
-                <p className="text-gray-300 text-lg max-w-md mx-auto">RewardWise sees your entire rewards portfolio and makes the smartest booking decision for you.</p>
+                <p className="text-white text-lg max-w-md mx-auto drop-shadow-lg">RewardWise sees your entire rewards portfolio and makes the smartest booking decision for you.</p>
               </div>
 
               {/* How it works — compact strip */}
