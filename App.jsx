@@ -742,6 +742,47 @@ function LandingPage({ navigate }) {
 function SignUpPage({ navigate }) {
   const { login } = useAuth()
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [showPassword, setShowPassword] = useState(false); const [errors, setErrors] = useState({}); const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+
+  // Handle Google OAuth callback — parse access_token from URL hash
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash && hash.includes('access_token')) {
+      setGoogleLoading(true)
+      const params = new URLSearchParams(hash.substring(1))
+      const accessToken = params.get('access_token')
+      if (accessToken) {
+        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.email) {
+              window.history.replaceState(null, '', window.location.pathname)
+              login(data.email)
+              navigate('home')
+            } else {
+              setGoogleLoading(false)
+            }
+          })
+          .catch(() => { setGoogleLoading(false) })
+      }
+    }
+  }, [])
+
+  const handleGoogleSignIn = () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId) { setErrors({ google: 'Google Sign-In is not configured. Set VITE_GOOGLE_CLIENT_ID.' }); return }
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: window.location.origin + '/signup',
+      response_type: 'token',
+      scope: 'openid email profile',
+      prompt: 'select_account'
+    })
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+  }
+
   const validate = () => { const errs = {}; if (!email) errs.email = 'Email address is required'; else if (!/\S+@\S+\.\S+/.test(email)) errs.email = 'Please enter a valid email address'; if (!password) errs.password = 'Password is required'; else if (password.length < 8) errs.password = 'Password must be at least 8 characters long'; setErrors(errs); return Object.keys(errs).length === 0 }
   const handleSubmit = (e) => { e.preventDefault(); if (!validate()) return; setLoading(true); setTimeout(() => { login(email); navigate('wallet-setup') }, 1000) }
   return (
@@ -754,12 +795,27 @@ function SignUpPage({ navigate }) {
           <h1 id="main-content" className="text-2xl font-bold text-white mb-2">Create your account</h1>
           <p className="text-gray-400 mb-6">Start your journey to smarter travel rewards</p>
           {Object.keys(errors).length > 0 && (<div role="alert" className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-4"><ul className="text-red-300 text-sm list-disc list-inside">{Object.values(errors).map((error, i) => <li key={i}>{error}</li>)}</ul></div>)}
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            <div><label htmlFor="signup-email" className="block text-sm text-gray-300 mb-1">Email <span className="text-red-400">*</span></label><div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" /><input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" className={`w-full bg-gray-800 border ${errors.email ? 'border-red-500' : 'border-gray-700'} rounded-lg py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500`} /></div></div>
-            <div><label htmlFor="signup-password" className="block text-sm text-gray-300 mb-1">Password <span className="text-red-400">*</span></label><div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" /><input id="signup-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" className={`w-full bg-gray-800 border ${errors.password ? 'border-red-500' : 'border-gray-700'} rounded-lg py-3 pl-10 pr-12 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500`} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300" aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button></div></div>
-            <button type="submit" disabled={loading} className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">{loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Creating account...</> : 'Create Account'}</button>
-          </form>
-          <p className="mt-4 text-center text-gray-400 text-sm">Already have an account? <button onClick={() => navigate('login')} className="text-emerald-400 hover:text-emerald-300">Log In</button></p>
+          {googleLoading ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+              <p className="text-gray-300">Signing you in with Google...</p>
+            </div>
+          ) : (
+            <>
+              {errors.google && <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-4"><p className="text-red-300 text-sm">{errors.google}</p></div>}
+              <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                <div><label htmlFor="signup-email" className="block text-sm text-gray-300 mb-1">Email <span className="text-red-400">*</span></label><div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" /><input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" className={`w-full bg-gray-800 border ${errors.email ? 'border-red-500' : 'border-gray-700'} rounded-lg py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500`} /></div></div>
+                <div><label htmlFor="signup-password" className="block text-sm text-gray-300 mb-1">Password <span className="text-red-400">*</span></label><div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" /><input id="signup-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" className={`w-full bg-gray-800 border ${errors.password ? 'border-red-500' : 'border-gray-700'} rounded-lg py-3 pl-10 pr-12 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500`} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300" aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button></div></div>
+                <button type="submit" disabled={loading} className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">{loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Creating account...</> : 'Create Account'}</button>
+              </form>
+              <div className="my-4 flex items-center gap-3"><div className="flex-1 h-px bg-gray-700" /><span className="text-gray-500 text-sm">or</span><div className="flex-1 h-px bg-gray-700" /></div>
+              <button onClick={handleGoogleSignIn} className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-800 font-medium py-3 rounded-lg transition-colors">
+                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59a14.5 14.5 0 0 1 0-9.18l-7.98-6.19a24.01 24.01 0 0 0 0 21.56l7.98-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                Sign in with Google
+              </button>
+              <p className="mt-4 text-center text-gray-400 text-sm">Already have an account? <button onClick={() => navigate('login')} className="text-emerald-400 hover:text-emerald-300">Log In</button></p>
+            </>
+          )}
           <div className="mt-3 pt-3 border-t border-gray-700/50 text-center">
             <p className="text-gray-500 text-xs mb-1">Not planning a trip yet?</p>
             <button onClick={() => { login(email || 'demo@rewardwise.com'); navigate('wallet-setup') }} className="text-blue-400 hover:text-blue-300 text-sm font-medium">Just show me my wallet value →</button>
