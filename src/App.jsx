@@ -1334,13 +1334,18 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
     // Auto-fill dates if empty
     if (!departDate) { const d = new Date(); d.setDate(d.getDate() + 21); setDepartDate(d.toISOString().split('T')[0]) }
     if (!returnDate && tripType === 'roundtrip') { const d = new Date(); d.setDate(d.getDate() + 28); setReturnDate(d.toISOString().split('T')[0]) }
-    incrementSearch(); setSearching(true); setTimeout(() => {
+    incrementSearch(); setSearching(true); setAlertSet(false); setTimeout(() => {
     setVerdict(generateVerdict(origin, destination, cabin, abTests, tripType))
     setSearching(false)
     setConfettiKey(k => k + 1)
     setTimeout(() => { const el = document.getElementById('verdict-results'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 100)
   }, 3500) }
-  const addToWatchlist = () => { setWatchlist(prev => [...prev, { id: Date.now(), origin, destination, departDate, cabin }]) }
+  const [alertSet, setAlertSet] = useState(false)
+  const addToWatchlist = () => {
+    if (alertSet) return
+    setWatchlist(prev => [...prev, { id: Date.now(), origin, destination, departDate, returnDate: returnDate || null, cabin, travelers, addedAt: 'just now', currentPrice: activeVerdict?.pointsCost || 0, priceChange: 0, verdictType: activeVerdict?.type, cashPrice: activeVerdict?.cashPrice || null, airline: activeVerdict?.airline || null }])
+    setAlertSet(true)
+  }
   const [selectedAlt, setSelectedAlt] = useState(false)
   const activeVerdict = selectedAlt && verdict?.alternative ? verdict.alternative : verdict
   return (
@@ -1438,7 +1443,10 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
                   <div className="space-y-2 mb-4">{activeVerdict.options?.map((opt, i) => (
                     <div key={i} className={`flex justify-between items-center p-3 rounded-lg ${opt.cpp === null ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-gray-800/50'}`}><span className="text-white text-sm">{opt.path}</span><div className="text-right"><span className="text-white text-sm font-medium">{opt.cpp ? opt.cost.toLocaleString() + ' pts' : '$' + opt.cost}</span><p className="text-xs">{opt.rating}</p></div></div>
                   ))}</div>
-                  <div className="flex gap-3"><a href={`https://www.google.com/travel/flights?q=${origin}+to+${destination}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">Book Cash Flight <ArrowUpRight className="w-4 h-4" /></a><button onClick={addToWatchlist} className="px-4 border border-gray-600 text-white rounded-lg flex items-center gap-2 hover:bg-gray-800"><Star className="w-4 h-4" /> Save</button><button onClick={addToWatchlist} className="px-4 border border-gray-600 text-white rounded-lg flex items-center gap-2 hover:bg-gray-800"><Bell className="w-5 h-5" /></button></div>
+                  <div className="space-y-2">
+                    <a href={`https://www.google.com/travel/flights?q=${origin}+to+${destination}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">Book Cash Flight <ArrowUpRight className="w-4 h-4" /></a>
+                    <button onClick={addToWatchlist} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /> Alert Set — Watching This Route</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                  </div>
                 </div>
               ) : (
                 <div className="bg-gray-900/90 backdrop-blur rounded-xl p-6 shadow-2xl mb-4">
@@ -1452,7 +1460,10 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
                     {activeVerdict?.seatsAvailable && <p className="text-amber-400 text-xs mt-1">⚡ {activeVerdict.seatsAvailable} seats left as of {activeVerdict.seatsTimestamp}</p>}
                   </div>
                   <div className="flex justify-between items-center bg-emerald-500/20 rounded-lg p-4 mb-4"><div><p className="text-emerald-400 font-medium">You save</p><p className="text-gray-400 text-sm">vs. paying cash</p></div><p className="text-emerald-400 font-bold text-3xl">${((activeVerdict?.savings || 0) * parseInt(travelers)).toLocaleString()}</p></div>
-                  <div className="flex gap-3"><button onClick={() => setShowBooking(true)} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">Book on {activeVerdict?.airline} <ArrowUpRight className="w-4 h-4" /></button><button onClick={addToWatchlist} className="px-4 border border-gray-600 text-white rounded-lg flex items-center gap-2 hover:bg-gray-800"><Star className="w-4 h-4" /> Save</button><button onClick={addToWatchlist} className="px-4 border border-gray-600 text-white rounded-lg flex items-center gap-2 hover:bg-gray-800"><Bell className="w-5 h-5" /></button></div>
+                  <div className="space-y-2">
+                    <button onClick={() => setShowBooking(true)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">Book on {activeVerdict?.airline} <ArrowUpRight className="w-4 h-4" /></button>
+                    <button onClick={addToWatchlist} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /> Alert Set — Watching This Route</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                  </div>
                 </div>
               )}
             </>
