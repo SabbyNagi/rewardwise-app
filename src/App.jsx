@@ -124,7 +124,7 @@ function App() {
       case 'login': return <LoginPage navigate={navigate} />
       case 'forgot-password': return <ForgotPasswordPage navigate={navigate} />
       case 'wallet-setup': return <WalletSetupPage navigate={navigate} userCards={userCards} setUserCards={setUserCards} />
-      case 'home': return <DashboardPage navigate={navigate} userCards={userCards} watchlist={watchlist} setShowZoe={setShowZoe} conciergeRequests={conciergeRequests} />
+      case 'home': return <DashboardPage navigate={navigate} userCards={userCards} watchlist={watchlist} setWatchlist={setWatchlist} setShowZoe={setShowZoe} conciergeRequests={conciergeRequests} />
       case 'search': return <SearchPage navigate={navigate} userCards={userCards} setWatchlist={setWatchlist} />
       case 'trips': return <TripsPage navigate={navigate} />
       case 'circle': return <WatchlistPage navigate={navigate} watchlist={watchlist} setWatchlist={setWatchlist} />
@@ -988,7 +988,7 @@ function parseDates(dateStr) {
 }
 
 // ==================== DASHBOARD ====================
-function DashboardPage({ navigate, userCards, watchlist, setShowZoe, conciergeRequests }) {
+function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZoe, conciergeRequests }) {
   const { user, logout, incrementSearch } = useAuth()
   const { searchFill, triggerSearch, setTriggerSearch, setPendingSearch } = useContext(SearchFillContext)
   const abTests = useABTest()
@@ -1007,6 +1007,30 @@ function DashboardPage({ navigate, userCards, watchlist, setShowZoe, conciergeRe
   const [verdict, setVerdict] = useState(null)
   const [confettiKey, setConfettiKey] = useState(0)
   const [showBooking, setShowBooking] = useState(false)
+  const [alertSet, setAlertSet] = useState(false)
+
+  const handleSetAlert = () => {
+    if (alertSet || !verdict || !origin || !destination) return
+    const isAlreadyWatched = watchlist.some(w => w.origin === origin && w.destination === destination && w.departDate === departDate)
+    if (isAlreadyWatched) { setAlertSet(true); return }
+    const newItem = {
+      id: Date.now(),
+      origin,
+      destination,
+      departDate,
+      returnDate: returnDate || null,
+      cabin,
+      travelers,
+      addedAt: 'just now',
+      currentPrice: verdict.pointsCost || 0,
+      priceChange: 0,
+      verdictType: verdict.type,
+      cashPrice: verdict.cashPrice || null,
+      airline: verdict.airline || null,
+    }
+    setWatchlist(prev => [newItem, ...prev])
+    setAlertSet(true)
+  }
 
   // Auto-fill from Zoe
   useEffect(() => {
@@ -1034,6 +1058,7 @@ function DashboardPage({ navigate, userCards, watchlist, setShowZoe, conciergeRe
     if (!returnDate && tripType === 'roundtrip') { const d = new Date(); d.setDate(d.getDate() + 28); setReturnDate(d.toISOString().split('T')[0]) }
     incrementSearch()
     setSearching(true)
+    setAlertSet(false)
     setTimeout(() => {
       setVerdict(generateVerdict(origin, destination, cabin, abTests, tripType))
       setSearching(false)
@@ -1180,6 +1205,7 @@ function DashboardPage({ navigate, userCards, watchlist, setShowZoe, conciergeRe
                         <p className="text-gray-400 text-xs">Your {verdict.pointsCost.toLocaleString()} points are better used on international premium cabin flights where they're worth 3-5× more.</p>
                       </div>
                       <a href={`https://www.google.com/travel/flights?q=${origin}+to+${destination}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm">Book Cash Flight <ArrowUpRight className="w-4 h-4" /></a>
+                      <button onClick={handleSetAlert} disabled={alertSet} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /> Alert Set</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                     </div>
                   </div>
                 </div>
@@ -1223,6 +1249,7 @@ function DashboardPage({ navigate, userCards, watchlist, setShowZoe, conciergeRe
                         <div className="text-right"><p className="text-gray-400 text-xs uppercase">You Save</p><p className="text-emerald-400 font-bold text-xl">~${(verdict.savings * parseInt(travelers)).toLocaleString()}</p></div>
                       </div>
                       <button onClick={() => setShowBooking(true)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm">Book This Flight <ArrowUpRight className="w-4 h-4" /></button>
+                      <button onClick={handleSetAlert} disabled={alertSet} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /> Alert Set</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                     </div>
                   </div>
                 </div>
