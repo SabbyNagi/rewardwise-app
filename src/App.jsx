@@ -18,6 +18,32 @@ const LiveRegion = ({ message }) => (
   <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{message}</div>
 )
 
+// Toast context and component
+const ToastContext = createContext()
+function ToastProvider({ children }) {
+  const [toast, setToast] = useState(null)
+  const timerRef = useRef(null)
+  const showToast = (message, duration = 5000) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    setToast(message)
+    timerRef.current = setTimeout(() => setToast(null), duration)
+  }
+  return (
+    <ToastContext.Provider value={showToast}>
+      {children}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-fade-in">
+          <div className="bg-gray-900/95 backdrop-blur border border-gray-700 rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 max-w-sm">
+            <Check className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <p className="text-white text-sm">{toast}</p>
+            <button onClick={() => setToast(null)} className="text-gray-500 hover:text-white ml-2 flex-shrink-0"><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )}
+    </ToastContext.Provider>
+  )
+}
+
 // Shared background component - EXACT original styling
 const TropicalBackground = () => (
   <div 
@@ -148,6 +174,7 @@ function App() {
     <AuthContext.Provider value={authValue}>
       <ABTestContext.Provider value={abTests}>
         <WatchlistContext.Provider value={{ watchlist, setWatchlist }}>
+        <ToastProvider>
         <SearchFillContext.Provider value={{ searchFill, setSearchFill, pendingSearch, setPendingSearch, triggerSearch, setTriggerSearch }}>
           <SkipLink />
           <LiveRegion message={announcement} />
@@ -155,6 +182,7 @@ function App() {
           {!['signup', 'login'].includes(currentPage) && <ZoeChat isOpen={showZoe} setIsOpen={setShowZoe} onFillSearch={setSearchFill} onTriggerSearch={() => { if (!user) { return } if (currentPage !== 'home') { setCurrentPage('home'); window.history.pushState({page:'home'}, '', '/home'); setTimeout(() => setTriggerSearch(true), 800) } else { setTriggerSearch(true) } }} currentPage={currentPage} messages={zoeMessages} setMessages={setZoeMessages} isAuthenticated={!!user} />}
           {showUpsell && <FreeUpsellModal onClose={() => setShowUpsell(false)} navigate={navigate} />}
         </SearchFillContext.Provider>
+        </ToastProvider>
         </WatchlistContext.Provider>
       </ABTestContext.Provider>
     </AuthContext.Provider>
@@ -1018,28 +1046,23 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
   const [confettiKey, setConfettiKey] = useState(0)
   const [showBooking, setShowBooking] = useState(false)
   const [alertSet, setAlertSet] = useState(false)
+  const [alertItemId, setAlertItemId] = useState(null)
+  const showToast = useContext(ToastContext)
 
   const handleSetAlert = () => {
-    if (alertSet || !verdict || !origin || !destination) return
-    const isAlreadyWatched = watchlist.some(w => w.origin === origin && w.destination === destination && w.departDate === departDate)
-    if (isAlreadyWatched) { setAlertSet(true); return }
-    const newItem = {
-      id: Date.now(),
-      origin,
-      destination,
-      departDate,
-      returnDate: returnDate || null,
-      cabin,
-      travelers,
-      addedAt: 'just now',
-      currentPrice: verdict.pointsCost || 0,
-      priceChange: 0,
-      verdictType: verdict.type,
-      cashPrice: verdict.cashPrice || null,
-      airline: verdict.airline || null,
+    if (!verdict || !origin || !destination) return
+    if (alertSet) {
+      setWatchlist(prev => prev.filter(w => w.id !== alertItemId))
+      setAlertSet(false)
+      setAlertItemId(null)
+      showToast(`Alert removed for ${origin} → ${destination}`)
+      return
     }
-    setWatchlist(prev => [newItem, ...prev])
+    const id = Date.now()
+    setWatchlist(prev => [{ id, origin, destination, departDate, returnDate: returnDate || null, cabin, travelers, addedAt: 'just now', currentPrice: verdict.pointsCost || 0, priceChange: 0, verdictType: verdict.type, cashPrice: verdict.cashPrice || null, airline: verdict.airline || null }, ...prev])
     setAlertSet(true)
+    setAlertItemId(id)
+    showToast(`Alert set for ${origin} → ${destination}. We'll check daily and notify you of changes.`)
   }
 
   // Auto-fill from Zoe
@@ -1069,6 +1092,7 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
     incrementSearch()
     setSearching(true)
     setAlertSet(false)
+    setAlertItemId(null)
     setTimeout(() => {
       setVerdict(generateVerdict(origin, destination, cabin, abTests, tripType))
       setSearching(false)
@@ -1215,7 +1239,7 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
                         <p className="text-gray-400 text-xs">Your {verdict.pointsCost.toLocaleString()} points are better used on international premium cabin flights where they're worth 3-5× more.</p>
                       </div>
                       <a href={`https://www.google.com/travel/flights?q=${origin}+to+${destination}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm">Book Cash Flight <ArrowUpRight className="w-4 h-4" /></a>
-                      <button onClick={handleSetAlert} disabled={alertSet} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                      <button onClick={handleSetAlert} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><X className="w-4 h-4" /> Remove Alert</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                     </div>
                   </div>
                 </div>
@@ -1259,7 +1283,7 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
                         <div className="text-right"><p className="text-gray-400 text-xs uppercase">You Save</p><p className="text-emerald-400 font-bold text-xl">~${(verdict.savings * parseInt(travelers)).toLocaleString()}</p></div>
                       </div>
                       <button onClick={() => setShowBooking(true)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm">Book This Flight <ArrowUpRight className="w-4 h-4" /></button>
-                      <button onClick={handleSetAlert} disabled={alertSet} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                      <button onClick={handleSetAlert} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><X className="w-4 h-4" /> Remove Alert</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                     </div>
                   </div>
                 </div>
@@ -1344,17 +1368,28 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
     // Auto-fill dates if empty
     if (!departDate) { const d = new Date(); d.setDate(d.getDate() + 21); setDepartDate(d.toISOString().split('T')[0]) }
     if (!returnDate && tripType === 'roundtrip') { const d = new Date(); d.setDate(d.getDate() + 28); setReturnDate(d.toISOString().split('T')[0]) }
-    incrementSearch(); setSearching(true); setAlertSet(false); setTimeout(() => {
+    incrementSearch(); setSearching(true); setAlertSet(false); setAlertItemId(null); setTimeout(() => {
     setVerdict(generateVerdict(origin, destination, cabin, abTests, tripType))
     setSearching(false)
     setConfettiKey(k => k + 1)
     setTimeout(() => { const el = document.getElementById('verdict-results'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 100)
   }, 3500) }
   const [alertSet, setAlertSet] = useState(false)
-  const addToWatchlist = () => {
-    if (alertSet) return
-    setWatchlist(prev => [...prev, { id: Date.now(), origin, destination, departDate, returnDate: returnDate || null, cabin, travelers, addedAt: 'just now', currentPrice: activeVerdict?.pointsCost || 0, priceChange: 0, verdictType: activeVerdict?.type, cashPrice: activeVerdict?.cashPrice || null, airline: activeVerdict?.airline || null }])
-    setAlertSet(true)
+  const [alertItemId, setAlertItemId] = useState(null)
+  const showToast = useContext(ToastContext)
+  const toggleWatchlist = () => {
+    if (alertSet) {
+      setWatchlist(prev => prev.filter(w => w.id !== alertItemId))
+      setAlertSet(false)
+      setAlertItemId(null)
+      showToast(`Alert removed for ${origin} → ${destination}`)
+    } else {
+      const id = Date.now()
+      setWatchlist(prev => [...prev, { id, origin, destination, departDate, returnDate: returnDate || null, cabin, travelers, addedAt: 'just now', currentPrice: activeVerdict?.pointsCost || 0, priceChange: 0, verdictType: activeVerdict?.type, cashPrice: activeVerdict?.cashPrice || null, airline: activeVerdict?.airline || null }])
+      setAlertSet(true)
+      setAlertItemId(id)
+      showToast(`Alert set for ${origin} → ${destination}. We'll check daily and notify you of changes.`)
+    }
   }
   const [selectedAlt, setSelectedAlt] = useState(false)
   const activeVerdict = selectedAlt && verdict?.alternative ? verdict.alternative : verdict
@@ -1420,7 +1455,7 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
                       <button onClick={() => setShowVerdictPopup(false)} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg text-sm">View Full Details</button>
                       <button onClick={() => { setShowVerdictPopup(false); setShowBooking(true) }} className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm">Book Now <ArrowUpRight className="w-4 h-4" /></button>
                     </div>
-                    <button onClick={() => { addToWatchlist(); setShowVerdictPopup(false) }} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                    <button onClick={() => { toggleWatchlist(); if (!alertSet) setShowVerdictPopup(false) }} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><X className="w-4 h-4" /> Remove Alert</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                   </div>
                   <button onClick={() => setShowVerdictPopup(false)} className="w-full text-gray-500 hover:text-gray-300 text-sm py-2">Close</button>
                 </div>
@@ -1457,7 +1492,7 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
                   ))}</div>
                   <div className="space-y-2">
                     <a href={`https://www.google.com/travel/flights?q=${origin}+to+${destination}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">Book Cash Flight <ArrowUpRight className="w-4 h-4" /></a>
-                    <button onClick={addToWatchlist} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                    <button onClick={toggleWatchlist} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><X className="w-4 h-4" /> Remove Alert</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                   </div>
                 </div>
               ) : (
@@ -1474,7 +1509,7 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
                   <div className="flex justify-between items-center bg-emerald-500/20 rounded-lg p-4 mb-4"><div><p className="text-emerald-400 font-medium">You save</p><p className="text-gray-400 text-sm">vs. paying cash</p></div><p className="text-emerald-400 font-bold text-3xl">${((activeVerdict?.savings || 0) * parseInt(travelers)).toLocaleString()}</p></div>
                   <div className="space-y-2">
                     <button onClick={() => setShowBooking(true)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">Book on {activeVerdict?.airline} <ArrowUpRight className="w-4 h-4" /></button>
-                    <button onClick={addToWatchlist} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                    <button onClick={toggleWatchlist} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><X className="w-4 h-4" /> Remove Alert</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                   </div>
                 </div>
               )}
