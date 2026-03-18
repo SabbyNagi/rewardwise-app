@@ -18,32 +18,6 @@ const LiveRegion = ({ message }) => (
   <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{message}</div>
 )
 
-// Toast context and component
-const ToastContext = createContext()
-function ToastProvider({ children }) {
-  const [toast, setToast] = useState(null)
-  const timerRef = useRef(null)
-  const showToast = (message, duration = 5000) => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    setToast(message)
-    timerRef.current = setTimeout(() => setToast(null), duration)
-  }
-  return (
-    <ToastContext.Provider value={showToast}>
-      {children}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-fade-in">
-          <div className="bg-gray-900/95 backdrop-blur border border-gray-700 rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 max-w-sm">
-            <Check className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-            <p className="text-white text-sm">{toast}</p>
-            <button onClick={() => setToast(null)} className="text-gray-500 hover:text-white ml-2 flex-shrink-0"><X className="w-4 h-4" /></button>
-          </div>
-        </div>
-      )}
-    </ToastContext.Provider>
-  )
-}
-
 // Shared background component - EXACT original styling
 const TropicalBackground = () => (
   <div 
@@ -174,7 +148,6 @@ function App() {
     <AuthContext.Provider value={authValue}>
       <ABTestContext.Provider value={abTests}>
         <WatchlistContext.Provider value={{ watchlist, setWatchlist }}>
-        <ToastProvider>
         <SearchFillContext.Provider value={{ searchFill, setSearchFill, pendingSearch, setPendingSearch, triggerSearch, setTriggerSearch }}>
           <SkipLink />
           <LiveRegion message={announcement} />
@@ -182,7 +155,6 @@ function App() {
           {!['signup', 'login'].includes(currentPage) && <ZoeChat isOpen={showZoe} setIsOpen={setShowZoe} onFillSearch={setSearchFill} onTriggerSearch={() => { if (!user) { return } if (currentPage !== 'home') { setCurrentPage('home'); window.history.pushState({page:'home'}, '', '/home'); setTimeout(() => setTriggerSearch(true), 800) } else { setTriggerSearch(true) } }} currentPage={currentPage} messages={zoeMessages} setMessages={setZoeMessages} isAuthenticated={!!user} />}
           {showUpsell && <FreeUpsellModal onClose={() => setShowUpsell(false)} navigate={navigate} />}
         </SearchFillContext.Provider>
-        </ToastProvider>
         </WatchlistContext.Provider>
       </ABTestContext.Provider>
     </AuthContext.Provider>
@@ -1047,7 +1019,7 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
   const [showBooking, setShowBooking] = useState(false)
   const [alertSet, setAlertSet] = useState(false)
   const [alertItemId, setAlertItemId] = useState(null)
-  const showToast = useContext(ToastContext)
+  const [showAlertBanner, setShowAlertBanner] = useState(false)
 
   const handleSetAlert = () => {
     if (!verdict || !origin || !destination) return
@@ -1055,14 +1027,14 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
       setWatchlist(prev => prev.filter(w => w.id !== alertItemId))
       setAlertSet(false)
       setAlertItemId(null)
-      showToast(`Alert removed for ${origin} → ${destination}`)
+      setShowAlertBanner(false)
       return
     }
     const id = Date.now()
     setWatchlist(prev => [{ id, origin, destination, departDate, returnDate: returnDate || null, cabin, travelers, addedAt: 'just now', currentPrice: verdict.pointsCost || 0, priceChange: 0, verdictType: verdict.type, cashPrice: verdict.cashPrice || null, airline: verdict.airline || null }, ...prev])
     setAlertSet(true)
     setAlertItemId(id)
-    showToast(`Alert set for ${origin} → ${destination}. We'll check daily and notify you of changes.`)
+    setShowAlertBanner(true)
   }
 
   // Auto-fill from Zoe
@@ -1093,6 +1065,7 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
     setSearching(true)
     setAlertSet(false)
     setAlertItemId(null)
+    setShowAlertBanner(false)
     setTimeout(() => {
       setVerdict(generateVerdict(origin, destination, cabin, abTests, tripType))
       setSearching(false)
@@ -1298,10 +1271,27 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
               )}
             </>
           )}
+
+          {/* Alert confirmation banner */}
+          {showAlertBanner && alertSet && verdict && !searching && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5 mt-4 relative animate-fade-in">
+              <button onClick={() => setShowAlertBanner(false)} className="absolute top-3 right-3 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Bell className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-sm mb-1">Alert set for {origin} → {destination}</h3>
+                  <p className="text-gray-300 text-sm mb-2">We'll send you an email once a day with availability and price changes for this route.</p>
+                  <p className="text-gray-400 text-xs">You can still go ahead and book this flight — if you do, the alert will be removed automatically.</p>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
 
         {/* Bottom navigation */}
-        
+
       </div>
       {showBooking && verdict && verdict.type === 'points' && (
         <BookingInterstitial verdict={verdict} origin={origin} destination={destination} cabin={cabin} url={buildBookingUrl(origin, destination, departDate, cabin, verdict.airline)} onClose={() => setShowBooking(false)} />
@@ -1368,7 +1358,7 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
     // Auto-fill dates if empty
     if (!departDate) { const d = new Date(); d.setDate(d.getDate() + 21); setDepartDate(d.toISOString().split('T')[0]) }
     if (!returnDate && tripType === 'roundtrip') { const d = new Date(); d.setDate(d.getDate() + 28); setReturnDate(d.toISOString().split('T')[0]) }
-    incrementSearch(); setSearching(true); setAlertSet(false); setAlertItemId(null); setTimeout(() => {
+    incrementSearch(); setSearching(true); setAlertSet(false); setAlertItemId(null); setShowAlertBanner(false); setTimeout(() => {
     setVerdict(generateVerdict(origin, destination, cabin, abTests, tripType))
     setSearching(false)
     setConfettiKey(k => k + 1)
@@ -1376,19 +1366,19 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
   }, 3500) }
   const [alertSet, setAlertSet] = useState(false)
   const [alertItemId, setAlertItemId] = useState(null)
-  const showToast = useContext(ToastContext)
+  const [showAlertBanner, setShowAlertBanner] = useState(false)
   const toggleWatchlist = () => {
     if (alertSet) {
       setWatchlist(prev => prev.filter(w => w.id !== alertItemId))
       setAlertSet(false)
       setAlertItemId(null)
-      showToast(`Alert removed for ${origin} → ${destination}`)
+      setShowAlertBanner(false)
     } else {
       const id = Date.now()
       setWatchlist(prev => [...prev, { id, origin, destination, departDate, returnDate: returnDate || null, cabin, travelers, addedAt: 'just now', currentPrice: activeVerdict?.pointsCost || 0, priceChange: 0, verdictType: activeVerdict?.type, cashPrice: activeVerdict?.cashPrice || null, airline: activeVerdict?.airline || null }])
       setAlertSet(true)
       setAlertItemId(id)
-      showToast(`Alert set for ${origin} → ${destination}. We'll check daily and notify you of changes.`)
+      setShowAlertBanner(true)
     }
   }
   const [selectedAlt, setSelectedAlt] = useState(false)
@@ -1515,8 +1505,25 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
               )}
             </>
           )}
+
+          {/* Alert confirmation banner */}
+          {showAlertBanner && alertSet && verdict && !searching && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5 mb-4 relative animate-fade-in">
+              <button onClick={() => setShowAlertBanner(false)} className="absolute top-3 right-3 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Bell className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-sm mb-1">Alert set for {origin} → {destination}</h3>
+                  <p className="text-gray-300 text-sm mb-2">We'll send you an email once a day with availability and price changes for this route.</p>
+                  <p className="text-gray-400 text-xs">You can still go ahead and book this flight — if you do, the alert will be removed automatically.</p>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
-        
+
       </div>
       {showBooking && verdict && verdict.type === 'points' && (
         <BookingInterstitial verdict={verdict} origin={origin} destination={destination} cabin={cabin} url={buildBookingUrl(origin, destination, departDate, cabin, verdict.airline || activeVerdict?.airline)} onClose={() => setShowBooking(false)} />
