@@ -4,6 +4,9 @@ import { Plane, CheckCircle, ArrowRight, Sparkles, Eye, EyeOff, CreditCard, Plus
 // Search fill context — lets Zoe auto-fill the landing page search form
 const SearchFillContext = createContext()
 
+// Watchlist context — lets TopNav bell icon access watchlist without prop drilling
+const WatchlistContext = createContext()
+
 // ==================== ACCESSIBILITY ====================
 const SkipLink = () => (
   <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:bg-emerald-500 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">
@@ -144,6 +147,7 @@ function App() {
   return (
     <AuthContext.Provider value={authValue}>
       <ABTestContext.Provider value={abTests}>
+        <WatchlistContext.Provider value={{ watchlist, setWatchlist }}>
         <SearchFillContext.Provider value={{ searchFill, setSearchFill, pendingSearch, setPendingSearch, triggerSearch, setTriggerSearch }}>
           <SkipLink />
           <LiveRegion message={announcement} />
@@ -151,6 +155,7 @@ function App() {
           {!['signup', 'login'].includes(currentPage) && <ZoeChat isOpen={showZoe} setIsOpen={setShowZoe} onFillSearch={setSearchFill} onTriggerSearch={() => { if (!user) { return } if (currentPage !== 'home') { setCurrentPage('home'); window.history.pushState({page:'home'}, '', '/home'); setTimeout(() => setTriggerSearch(true), 800) } else { setTriggerSearch(true) } }} currentPage={currentPage} messages={zoeMessages} setMessages={setZoeMessages} isAuthenticated={!!user} />}
           {showUpsell && <FreeUpsellModal onClose={() => setShowUpsell(false)} navigate={navigate} />}
         </SearchFillContext.Provider>
+        </WatchlistContext.Provider>
       </ABTestContext.Provider>
     </AuthContext.Provider>
   )
@@ -321,12 +326,7 @@ function SearchProgress({ origin, destination, cabin, travelers, programs }) {
 // ==================== SHARED TOP NAV ====================
 function TopNav({ navigate, activeTab = 'home' }) {
   const [showAlerts, setShowAlerts] = useState(false)
-  const alerts = [
-    { id: 1, type: 'warning', icon: AlertTriangle, color: 'amber', title: '45K Marriott points expiring', desc: '90 days left — transfer or book to save ~$540', action: 'Fix this', page: 'health-check' },
-    { id: 2, type: 'bonus', icon: Gift, color: 'emerald', title: 'Amex → BA: 30% transfer bonus', desc: '80,000 MR → 104,000 Avios. Ends Mar 15', action: 'View', page: 'transfer-optimizer' },
-    { id: 3, type: 'deal', icon: TrendingUp, color: 'blue', title: 'Chase → Hyatt: 25% bonus', desc: '50,000 UR → 62,500 Hyatt points. Ends Mar 31', action: 'View', page: 'transfer-optimizer' },
-    { id: 4, type: 'seat', icon: Plane, color: 'purple', title: 'SFO→NRT: 2 biz seats opened', desc: 'ANA NH105 · 85K pts/person · usually gone in 48hrs', action: 'Book', page: 'search' },
-  ]
+  const { watchlist } = useContext(WatchlistContext)
   return (
     <nav className="bg-gray-900/95 backdrop-blur border-b border-gray-700 sticky top-0 z-40">
       <div className="flex items-center justify-between max-w-5xl mx-auto px-4">
@@ -349,33 +349,43 @@ function TopNav({ navigate, activeTab = 'home' }) {
           <div className="relative">
             <button onClick={() => setShowAlerts(!showAlerts)} className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm transition-colors relative ${showAlerts ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-800/50'}`}>
               <Bell className="w-4 h-4" />
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white font-bold flex items-center justify-center">{alerts.length}</span>
+              {watchlist.length > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white font-bold flex items-center justify-center">{watchlist.length > 9 ? '9+' : watchlist.length}</span>}
             </button>
             {showAlerts && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowAlerts(false)} />
                 <div className="absolute right-0 top-full mt-2 w-80 bg-gray-900/98 backdrop-blur border border-gray-700 rounded-xl shadow-2xl z-40 overflow-hidden">
                   <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-                    <p className="text-white font-semibold text-sm">Alerts</p>
-                    <span className="bg-red-500/20 text-red-400 text-xs font-medium px-2 py-0.5 rounded-full">{alerts.length} new</span>
+                    <p className="text-white font-semibold text-sm">Your Alerts</p>
+                    {watchlist.length > 0 && <span className="bg-amber-500/20 text-amber-400 text-xs font-medium px-2 py-0.5 rounded-full">{watchlist.length} watching</span>}
                   </div>
                   <div className="max-h-80 overflow-y-auto">
-                    {alerts.map(alert => (
-                      <button key={alert.id} onClick={() => { setShowAlerts(false); navigate(alert.page) }} className="w-full text-left px-4 py-3 hover:bg-gray-800/50 border-b border-gray-800/50 transition-colors">
-                        <div className="flex items-start gap-3">
-                          <alert.icon className={`w-4 h-4 text-${alert.color}-400 flex-shrink-0 mt-0.5`} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white text-sm font-medium">{alert.title}</p>
-                            <p className="text-gray-400 text-xs mt-0.5">{alert.desc}</p>
+                    {watchlist.length === 0 ? (
+                      <div className="px-4 py-6 text-center">
+                        <Bell className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                        <p className="text-gray-400 text-sm">No alerts yet</p>
+                        <p className="text-gray-500 text-xs mt-1">Search a flight and tap "Set Alert" to start watching</p>
+                      </div>
+                    ) : (
+                      watchlist.map(item => (
+                        <button key={item.id} onClick={() => { setShowAlerts(false); navigate('circle') }} className="w-full text-left px-4 py-3 hover:bg-gray-800/50 border-b border-gray-800/50 transition-colors">
+                          <div className="flex items-start gap-3">
+                            <Plane className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm font-medium">{item.origin} → {item.destination}</p>
+                              <p className="text-gray-400 text-xs mt-0.5">{item.cabin} · {item.travelers} traveler{parseInt(item.travelers) > 1 ? 's' : ''} · {item.addedAt}</p>
+                            </div>
+                            <span className="text-amber-400 text-xs font-medium whitespace-nowrap">Watching</span>
                           </div>
-                          <span className={`text-${alert.color}-400 text-xs font-medium whitespace-nowrap`}>{alert.action} →</span>
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      ))
+                    )}
                   </div>
-                  <div className="px-4 py-2.5 border-t border-gray-700">
-                    <button onClick={() => { setShowAlerts(false); navigate('health-check') }} className="text-emerald-400 hover:text-emerald-300 text-xs font-medium w-full text-center">View all alerts →</button>
-                  </div>
+                  {watchlist.length > 0 && (
+                    <div className="px-4 py-2.5 border-t border-gray-700">
+                      <button onClick={() => { setShowAlerts(false); navigate('circle') }} className="text-emerald-400 hover:text-emerald-300 text-xs font-medium w-full text-center">View all in Circle →</button>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1205,7 +1215,7 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
                         <p className="text-gray-400 text-xs">Your {verdict.pointsCost.toLocaleString()} points are better used on international premium cabin flights where they're worth 3-5× more.</p>
                       </div>
                       <a href={`https://www.google.com/travel/flights?q=${origin}+to+${destination}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm">Book Cash Flight <ArrowUpRight className="w-4 h-4" /></a>
-                      <button onClick={handleSetAlert} disabled={alertSet} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /> Alert Set</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                      <button onClick={handleSetAlert} disabled={alertSet} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                     </div>
                   </div>
                 </div>
@@ -1249,7 +1259,7 @@ function DashboardPage({ navigate, userCards, watchlist, setWatchlist, setShowZo
                         <div className="text-right"><p className="text-gray-400 text-xs uppercase">You Save</p><p className="text-emerald-400 font-bold text-xl">~${(verdict.savings * parseInt(travelers)).toLocaleString()}</p></div>
                       </div>
                       <button onClick={() => setShowBooking(true)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm">Book This Flight <ArrowUpRight className="w-4 h-4" /></button>
-                      <button onClick={handleSetAlert} disabled={alertSet} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /> Alert Set</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                      <button onClick={handleSetAlert} disabled={alertSet} className={`w-full mt-2 font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                     </div>
                   </div>
                 </div>
@@ -1405,10 +1415,12 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
                     </div>
                   )}
 
-                  <div className="flex gap-3 mb-3">
-                    <button onClick={() => setShowVerdictPopup(false)} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg text-sm">View Full Details</button>
-                    <button onClick={() => { setShowVerdictPopup(false); setShowBooking(true) }} className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm">Book Now <ArrowUpRight className="w-4 h-4" /></button>
-                    <button onClick={() => { addToWatchlist(); setShowVerdictPopup(false) }} className="px-4 border border-gray-600 text-white rounded-lg flex items-center gap-2 hover:bg-gray-800 text-sm"><Star className="w-4 h-4" /> Save</button>
+                  <div className="space-y-2 mb-3">
+                    <div className="flex gap-3">
+                      <button onClick={() => setShowVerdictPopup(false)} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg text-sm">View Full Details</button>
+                      <button onClick={() => { setShowVerdictPopup(false); setShowBooking(true) }} className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm">Book Now <ArrowUpRight className="w-4 h-4" /></button>
+                    </div>
+                    <button onClick={() => { addToWatchlist(); setShowVerdictPopup(false) }} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                   </div>
                   <button onClick={() => setShowVerdictPopup(false)} className="w-full text-gray-500 hover:text-gray-300 text-sm py-2">Close</button>
                 </div>
@@ -1445,7 +1457,7 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
                   ))}</div>
                   <div className="space-y-2">
                     <a href={`https://www.google.com/travel/flights?q=${origin}+to+${destination}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">Book Cash Flight <ArrowUpRight className="w-4 h-4" /></a>
-                    <button onClick={addToWatchlist} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /> Alert Set — Watching This Route</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                    <button onClick={addToWatchlist} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                   </div>
                 </div>
               ) : (
@@ -1462,7 +1474,7 @@ function SearchPage({ navigate, userCards, setWatchlist }) {
                   <div className="flex justify-between items-center bg-emerald-500/20 rounded-lg p-4 mb-4"><div><p className="text-emerald-400 font-medium">You save</p><p className="text-gray-400 text-sm">vs. paying cash</p></div><p className="text-emerald-400 font-bold text-3xl">${((activeVerdict?.savings || 0) * parseInt(travelers)).toLocaleString()}</p></div>
                   <div className="space-y-2">
                     <button onClick={() => setShowBooking(true)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">Book on {activeVerdict?.airline} <ArrowUpRight className="w-4 h-4" /></button>
-                    <button onClick={addToWatchlist} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /> Alert Set — Watching This Route</> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
+                    <button onClick={addToWatchlist} disabled={alertSet} className={`w-full font-semibold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all ${alertSet ? 'bg-gray-800 text-gray-500 border border-gray-700 cursor-default' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>{alertSet ? <><Check className="w-4 h-4" /><span className="flex flex-col items-center leading-tight"><span>Alert Set</span><span className="text-[10px] text-gray-500 font-normal">Go to the Circle page to see your alerts</span></span></> : <><Bell className="w-4 h-4" /> Set Alert for This Route</>}</button>
                   </div>
                 </div>
               )}
